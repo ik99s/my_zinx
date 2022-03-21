@@ -37,7 +37,7 @@ var GlobalObject *GlobalObj
 */
 func (g *GlobalObj) Reload() {
 	//TODO 这里的读取路径问题要处理一下，为什么conf/zinx.json读不到文件
-	data, err := ioutil.ReadFile("myDemo/ZinxV0.5/conf/zinx.json")
+	data, err := ioutil.ReadFile("myDemo/ZinxV0.6/conf/zinx.json")
 	if err != nil {
 		panic(err)
 	}

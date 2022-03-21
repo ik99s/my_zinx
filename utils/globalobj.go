@@ -37,7 +37,7 @@ var GlobalObject *GlobalObj
 */
 func (g *GlobalObj) Reload() {
 	//TODO 这里的读取路径问题要处理一下，为什么conf/zinx.json读不到文件
-	data, err := ioutil.ReadFile("myDemo/ZinxV0.4/conf/zinx.json")
+	data, err := ioutil.ReadFile("myDemo/ZinxV0.5/conf/zinx.json")
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +56,7 @@ func init() {
 	//如果配置文件没有加载，默认的值
 	GlobalObject = &GlobalObj{
 		Name:           "ZinxServerApp",
-		Version:        "V0.4",
+		Version:        "V0.5",
 		TcpPort:        8999,
 		Host:           "0.0.0.0",
 		MaxConn:        1000,

@@ -22,9 +22,11 @@ type GlobalObj struct {
 	/*
 		Zinx
 	*/
-	Version        string //当前Zinx的版本号
-	MaxConn        int    //当前服务器主机允许的最大连接数
-	MaxPackageSize uint32 //当前Zinx框架数据包的最大值
+	Version          string //当前Zinx的版本号
+	MaxConn          int    //当前服务器主机允许的最大连接数
+	MaxPackageSize   uint32 //当前Zinx框架数据包的最大值
+	WorkerPoolSize   uint32 //当前业务工作池的Goroutine数量
+	MaxWorkerTaskLen uint32 //每个Worker对应消息队列可容纳任务数量的最大值
 }
 
 /*
@@ -37,7 +39,7 @@ var GlobalObject *GlobalObj
 */
 func (g *GlobalObj) Reload() {
 	//TODO 这里的读取路径问题要处理一下，为什么conf/zinx.json读不到文件
-	data, err := ioutil.ReadFile("myDemo/ZinxV0.7/conf/zinx.json")
+	data, err := ioutil.ReadFile("myDemo/ZinxV0.8/conf/zinx.json")
 	if err != nil {
 		panic(err)
 	}
@@ -55,12 +57,14 @@ func (g *GlobalObj) Reload() {
 func init() {
 	//如果配置文件没有加载，默认的值
 	GlobalObject = &GlobalObj{
-		Name:           "ZinxServerApp",
-		Version:        "V0.5",
-		TcpPort:        8999,
-		Host:           "0.0.0.0",
-		MaxConn:        1000,
-		MaxPackageSize: 4096,
+		Name:             "ZinxServerApp",
+		Version:          "V0.8",
+		TcpPort:          8999,
+		Host:             "0.0.0.0",
+		MaxConn:          1000,
+		MaxPackageSize:   4096,
+		WorkerPoolSize:   10,
+		MaxWorkerTaskLen: 1024,
 	}
 	//应该尝试从conf/zinx.json去加载用户自定义的参数
 	GlobalObject.Reload()

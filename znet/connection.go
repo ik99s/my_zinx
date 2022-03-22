@@ -19,8 +19,11 @@ type Connection struct {
 	//当前连接的状态
 	isClosed bool
 
-	//告知当前连接已经退出/停止的channel
+	//告知当前连接已经退出/停止的channel(由Reader告知Writer退出)
 	ExitChan chan bool
+
+	//无缓冲的管道，用于读、写Goroutine之间的消息通信
+	msgChan chan []byte
 
 	//消息的管理MsgID和对应的处理业务API关系
 	MsgHandler ziface.IMsgHandler
@@ -34,14 +37,15 @@ func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandl
 		MsgHandler: msgHandler,
 		isClosed:   false,
 		ExitChan:   make(chan bool, 1),
+		msgChan:    make(chan []byte),
 	}
 	return c
 }
 
 // StartReader 连接的读业务方法
 func (c *Connection) StartReader() {
-	fmt.Println("Reader Goroutine is running...")
-	defer fmt.Println("ConnID = ", c.ConnID, " Reader exits, Remote Address is ", c.RemoteAddr().String())
+	fmt.Println("[Reader Goroutine is running]...")
+	defer fmt.Println("[Reader exits] ConnID = ", c.ConnID, " Remote Address is ", c.RemoteAddr().String())
 	defer c.Stop()
 	for {
 		//创建一个拆包解包对象
@@ -50,6 +54,7 @@ func (c *Connection) StartReader() {
 		headData := make([]byte, dp.GetHeadLen())
 		if _, err := io.ReadFull(c.GetTCPConnection(), headData); err != nil {
 			fmt.Println("read msg head error ", err)
+			break
 		}
 		//拆包，得到msgID和msgDataLen
 		msg, err := dp.Unpack(headData)
@@ -77,18 +82,39 @@ func (c *Connection) StartReader() {
 	}
 }
 
+// StartWriter 写消息Goroutine，专门发送消息给客户端
+func (c *Connection) StartWriter() {
+	fmt.Println("[Writer Goroutine is running]...")
+	defer fmt.Println(c.RemoteAddr().String(), "[conn Writer exit]")
+	//不断阻塞等待channel的消息，一旦有消息就写给客户端
+	for {
+		select {
+		case data := <-c.msgChan:
+			//有数据要写给客户端
+			if _, err := c.Conn.Write(data); err != nil {
+				fmt.Println("Send data error ", err)
+				return
+			}
+		case <-c.ExitChan:
+			//代表Reader已经退出，则Writer也要退出
+			return
+		}
+	}
+}
+
 // Start 启动连接，让当前连接准备开始工作
 func (c *Connection) Start() {
-	fmt.Println("Conn Start...ConnID = ", c.ConnID)
+	fmt.Println("[Conn Start]...ConnID = ", c.ConnID)
 	//启动从当前连接读数据的业务
 	go c.StartReader()
-	//TODO 启动从当前连接写数据的业务
+	//启动从当前连接写数据的业务
+	go c.StartWriter()
 
 }
 
 // Stop 停止连接，结束当前连接的工作
 func (c *Connection) Stop() {
-	fmt.Println("Conn Stop...ConnID = ", c.ConnID)
+	fmt.Println("[Conn Stop]...ConnID = ", c.ConnID)
 	if c.isClosed == true {
 		return
 	}
@@ -96,8 +122,11 @@ func (c *Connection) Stop() {
 
 	//关闭socket连接
 	c.Conn.Close()
+	//告知Writer关闭
+	c.ExitChan <- true
 	//关闭管道
 	close(c.ExitChan)
+	close(c.msgChan)
 }
 
 // GetTCPConnection 获取当前连接的绑定socket conn
@@ -128,10 +157,7 @@ func (c *Connection) SendMsg(msgId uint32, data []byte) error {
 		fmt.Println("Pack error msg id = ", msgId)
 		return errors.New("Pack msg error")
 	}
-	//将数据发送给客户端
-	if _, err := c.Conn.Write(binaryMsg); err != nil {
-		fmt.Println("Write msg id = ", msgId, " error : ", err)
-		return errors.New("conn Write error")
-	}
+	//将数据发送给channel
+	c.msgChan <- binaryMsg
 	return nil
 }

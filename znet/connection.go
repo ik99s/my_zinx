@@ -11,6 +11,9 @@ import (
 
 // Connection 连接模块
 type Connection struct {
+	//当前Conn隶属于哪个Server
+	TcpServer ziface.IServer
+
 	//当前连接的socket TCP套接字
 	Conn *net.TCPConn
 
@@ -31,8 +34,9 @@ type Connection struct {
 }
 
 // NewConnection 初始化连接模块的方法
-func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
+func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
 	c := &Connection{
+		TcpServer:  server,
 		Conn:       conn,
 		ConnID:     connID,
 		MsgHandler: msgHandler,
@@ -40,6 +44,8 @@ func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandl
 		ExitChan:   make(chan bool, 1),
 		msgChan:    make(chan []byte),
 	}
+	//将conn加入到ConnManager中
+	c.TcpServer.GetConnMgr().Add(c)
 	return c
 }
 
@@ -117,7 +123,8 @@ func (c *Connection) Start() {
 	go c.StartReader()
 	//启动从当前连接写数据的业务
 	go c.StartWriter()
-
+	//按照开发者传递的创建连接之后需要调用的处理业务，执行对应的Hook函数
+	c.TcpServer.CallOnConnStart(c)
 }
 
 // Stop 停止连接，结束当前连接的工作
@@ -132,6 +139,10 @@ func (c *Connection) Stop() {
 	c.Conn.Close()
 	//告知Writer关闭
 	c.ExitChan <- true
+	//按照开发者传递的销毁连接之前需要调用的处理业务，执行对应的Hook函数
+	c.TcpServer.CallOnConnStop(c)
+	//将当前连接从ConnMgr中摘除
+	c.TcpServer.GetConnMgr().Remove(c)
 	//关闭管道
 	close(c.ExitChan)
 	close(c.msgChan)
